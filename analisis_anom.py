@@ -3,18 +3,87 @@
 Created on Tue Jun  8 12:13:32 2021
 
 @author: Gabriel R. Gelpi
-Obs: funciones tomadas y/o modificadas de la librería fatiando a terra
 """
 from __future__ import division, absolute_import
 import warnings
 import numpy
-
+import numpy as np #
 import utils
 
 
 
+#====================================================
+def hga(x, y, data, shape, method='fd'):
+    
+    dx = derivx(x, y, data, shape, method=method)
+    dy = derivy(x, y, data, shape, method=method)
+    
+    res = numpy.sqrt(dx ** 2 + dy ** 2)
+    return res
 
 
+#=====================================================
+def butt(x, y, data, shape, lamb_c, n):
+    r"""
+    Filtro Butterworth
+    """
+    nx, ny = shape
+    # Pad the array with the edge values to avoid instability
+    padded, padx, pady = _pad_data(data, shape)
+    kx, ky = _fftfreqs(x, y, shape, padded.shape)
+    kz = numpy.sqrt(kx**2 + ky**2)
+    kc = 2*np.pi/lamb_c
+    H = 1/(1+(kz/kc)*n) # filtro
+    pb_ft = numpy.fft.fft2(padded)*H # fft*H
+    cont = numpy.real(numpy.fft.ifft2(pb_ft))
+    # Remove padding
+    cont = cont[padx: padx + nx, pady: pady + ny].ravel()
+    return cont
+
+#=====================================================
+def pb_gaus(x, y, data, shape, lamb_c):
+    r"""
+    Filtro Gaussiano pasa bajos
+    """
+    nx, ny = shape
+    # Pad the array with the edge values to avoid instability
+    padded, padx, pady = _pad_data(data, shape)
+    kx, ky = _fftfreqs(x, y, shape, padded.shape)
+    
+    kz = numpy.sqrt(kx**2 + ky**2)
+    
+    k12 = 2*np.pi/lamb_c 
+    a = k12*k12/np.log(2)
+    
+    pb_ft = numpy.fft.fft2(padded)*numpy.exp(-kz*kz/a)
+    cont = numpy.real(numpy.fft.ifft2(pb_ft))
+    # Remove padding
+    cont = cont[padx: padx + nx, pady: pady + ny].ravel()
+    return cont
+
+
+#=====================================================
+def pa_gaus(x, y, data, shape, lamb_c):
+    r"""
+    Fiiltro Gaussiano pasa altos
+    """
+    nx, ny = shape
+    # Pad the array with the edge values to avoid instability
+    padded, padx, pady = _pad_data(data, shape)
+    kx, ky = _fftfreqs(x, y, shape, padded.shape)
+    
+    kz = numpy.sqrt(kx**2 + ky**2)
+    
+    k12 = 2*np.pi/lamb_c 
+    a = k12*k12/np.log(2)
+    pa_ft = numpy.fft.fft2(padded)*(1-numpy.exp(-kz*kz/a))
+    cont = numpy.real(numpy.fft.ifft2(pa_ft))
+    # Remove padding
+    cont = cont[padx: padx + nx, pady: pady + ny].ravel()
+    return cont
+
+
+#=====================================================
 def upcontinue(x, y, data, shape, height):
     r"""
     Upward continuation of potential field data.
@@ -48,11 +117,7 @@ def upcontinue(x, y, data, shape, height):
     Blakely, R. J. (1996), Potential Theory in Gravity and Magnetic
     Applications, Cambridge University Press.
     """
-    assert x.shape == y.shape, \
-        "x and y arrays must have same shape"
-    if height <= 0:
-        warnings.warn("Using 'height' <= 0 means downward continuation, " +
-                      "which is known to be unstable.")
+    
     nx, ny = shape
     # Pad the array with the edge values to avoid instability
     padded, padx, pady = _pad_data(data, shape)
@@ -115,52 +180,6 @@ def tga(x, y, data, shape, method='fd'):
     res = numpy.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
     return res
 
-def hga(x, y, data, shape, method='fd'):
-    r"""
-    Calculate the total gradient amplitude (TGA).
-    This the same as the `3D analytic signal` of Roest et al. (1992), but we
-    prefer the newer, more descriptive nomenclature suggested by Reid (2012).
-    The TGA is defined as the amplitude of the gradient vector of a potential
-    field :math:`T` (e.g. the magnetic total field anomaly):
-    .. math::
-        TGA = \sqrt{
-            \left(\frac{\partial T}{\partial x}\right)^2 +
-            \left(\frac{\partial T}{\partial y}\right)^2 +
-            \left(\frac{\partial T}{\partial z}\right)^2 }
-    .. note:: Requires gridded data.
-    .. warning::
-        If the data is not in SI units, the derivatives will be in
-        strange units and so will the total gradient amplitude! I strongly
-        recommend converting the data to SI **before** calculating the
-        TGA is you need the gradient in Eotvos (use one of the unit conversion
-        functions of :mod:`fatiando.utils`).
-    Parameters:
-    * x, y : 1D-arrays
-        The x and y coordinates of the grid points
-    * data : 1D-array
-        The potential field at the grid points
-    * shape : tuple = (nx, ny)
-        The shape of the grid
-    * method : string
-        The method used to calculate the horizontal derivatives. Options are:
-        ``'fd'`` for finite-difference (more stable) or ``'fft'`` for the Fast
-        Fourier Transform. The z derivative is always calculated by FFT.
-    Returns:
-    * tga : 1D-array
-        The amplitude of the total gradient
-    References:
-    Reid, A. (2012), Forgotten truths, myths and sacred cows of Potential
-    Fields Geophysics - II, in SEG Technical Program Expanded Abstracts 2012,
-    pp. 1-3, Society of Exploration Geophysicists.
-    Roest, W., J. Verhoef, and M. Pilkington (1992), Magnetic interpretation
-    using the 3-D analytic signal, GEOPHYSICS, 57(1), 116-125,
-    doi:10.1190/1.1443174.
-    """
-    dx = derivx(x, y, data, shape, method=method)
-    dy = derivy(x, y, data, shape, method=method)
-    #
-    res = numpy.sqrt(dx ** 2 + dy ** 2 )
-    return res
 
 
 
